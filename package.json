@@ -1,6 +1,6 @@
 {
   "name": "devicehive-message-bus-client",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "DeviceHive Message Bus (WS Proxy) Client",
   "main": "index.js",
   "scripts": {},

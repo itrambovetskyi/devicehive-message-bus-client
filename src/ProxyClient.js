@@ -184,4 +184,4 @@ class ProxyClient extends EventEmitter {
 }
 
 
-module.exports = new ProxyClient();
+module.exports = ProxyClient;

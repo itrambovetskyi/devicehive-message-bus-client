@@ -1,11 +1,12 @@
 const EventEmitter = require(`events`);
+const uuid = require('uuid/v1');
 const ProxyClient = require(`./ProxyClient`);
 const Utils = require(`./utils/Utils`);
 const { MessageUtils, MessageBuilder } = require(`devicehive-proxy-message`);
-const Request = require(`./common/model/rpc/Request`);
-const Response = require(`./common/model/rpc/Response`);
-const IncomingMessage = require(`./common/model/rpc/IncomingMessage`);
-const ErrorResponseBody = require(`./common/model/rpc/ErrorResponseBody`);
+const Request = require(`./message/Request`);
+const Response = require(`./message/Response`);
+const IncomingMessage = require(`./message/IncomingMessage`);
+const ErrorResponseBody = require(`./message/body/ErrorResponseBody`);
 const HandlerFactory = require(`./HandlerFactory`);
 
 
@@ -62,24 +63,39 @@ class Client extends EventEmitter {
 
         this.proxyClient.on(`open`, () => {
             if (!Utils.isEmpty(topicsToSubscribe)) {
+                const subscriptionMessageId = uuid();
+
                 this.proxyClient.sendMessage(MessageBuilder.subscribeTopic({
                     topicList: topicsToSubscribe,
                     subscriptionGroup: subscriptionGroup
-                }));
+                }, subscriptionMessageId));
+
+                this._ee.on(subscriptionMessageId, (subscriptionResponse) => {
+                    if (subscriptionResponse.status === MessageUtils.SUCCESS_STATUS) {
+                        this.emit(`ready`);
+                    }
+                })
             }
         });
 
         this.proxyClient.on(`message`, async (message) => {
-            if (message.type === MessageUtils.NOTIFICATION_TYPE) {
-                const payload = message.payload;
+            try {
+                switch(message.type) {
+                    case MessageUtils.NOTIFICATION_TYPE:
+                        const payload = message.payload;
 
-                if (payload && payload.message) {
-                    try {
-                        await this._handleIncomingMessage(IncomingMessage.normalize(JSON.parse(payload.message)));
-                    } catch (err) {
-                        this.emit(`error`, err);
-                    }
+                        if (payload && payload.message) {
+                            await this._handleIncomingMessage(IncomingMessage.normalize(JSON.parse(payload.message)));
+                        }
+                        break;
+                    case MessageUtils.TOPIC_TYPE:
+                        if (message.action === MessageUtils.SUBSCRIBE_ACTION) {
+                            await this._handleSubscriptionResponseMessage(message);
+                        }
+                        break;
                 }
+            } catch (err) {
+                this.emit(`error`, err);
             }
         });
     }
@@ -92,7 +108,15 @@ class Client extends EventEmitter {
     }
 
 
-    async sendRequest({ topic, partition, request, withResponse=true }={}) {
+    /**
+     *
+     * @param topic
+     * @param partition
+     * @param request
+     * @param withResponse
+     * @returns {Promise<any>}
+     */
+    sendRequest({ topic, partition, request, withResponse=true }={}) {
         return new Promise((resolve) => {
             this.proxyClient.sendMessage(MessageBuilder.createNotification({
                 topic: topic,
@@ -122,6 +146,17 @@ class Client extends EventEmitter {
             partition: partition,
             type: MessageUtils.RESPONSE_NOTIFICATION
         }));
+    }
+
+    /**
+     *
+     * @param message
+     * @returns {Promise<void>}
+     */
+    async _handleSubscriptionResponseMessage(message) {
+        if (message.id) {
+            this._ee.emit(message.id, message);
+        }
     }
 
     /**

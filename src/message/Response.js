@@ -12,8 +12,18 @@ class Response {
      * @param data
      */
     static normalize({ b, cId, l, err, fld } = {}) {
+        let body;
+
+        if (typeof b === 'string') {
+            try {
+                body = JSON.parse(b);
+            } catch (error) {
+                body = b;
+            }
+        }
+
         return new Response({
-            body: Body.normalize(b ? JSON.parse(b) : {}),
+            body: Body.normalize(body ? body : {}),
             correlationId: cId,
             last: l,
             errorCode: err,
@@ -117,7 +127,7 @@ class Response {
 
         me.body = value;
 
-        return me.body;
+        return me;
     }
 
     /**

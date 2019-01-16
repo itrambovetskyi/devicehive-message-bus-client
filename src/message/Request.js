@@ -22,8 +22,18 @@ class Request {
      * @param rest
      */
     static normalize({b, cId, pK, sre, rTo, t, ...rest} = {}) {
+        let body;
+
+        if (typeof b === 'string') {
+            try {
+                body = JSON.parse(b);
+            } catch (error) {
+                body = b;
+            }
+        }
+
         return new Request({
-            body: Body.normalize(b ? b : {}),
+            body: Body.normalize(body ? body : {}),
             correlationId: cId,
             partitionKey: pK,
             singleReplyExpected: sre,

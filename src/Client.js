@@ -32,12 +32,15 @@ class Client extends EventEmitter {
      * @returns {Response}
      */
     static _getErrorResponse(request, code, message) {
-        return (new Response({
+        const response = new Response({
             correlationId: request.correlationId,
             failed: true
-        }))
-            .withErrorCode(code)
-            .withBody(new ErrorResponseBody({message}));
+        });
+
+        response.withErrorCode(code);
+        response.withBody(new ErrorResponseBody({message}));
+
+        return response;
     }
 
 
@@ -114,10 +117,11 @@ class Client extends EventEmitter {
      * @param partition
      * @param request
      * @param withResponse
+     * @param responseTimeOut
      * @returns {Promise<any>}
      */
-    sendRequest({ topic, partition, request, withResponse=true }={}) {
-        return new Promise((resolve) => {
+    sendRequest({ topic, partition, request, withResponse=true, responseTimeOut }={}) {
+        return new Promise((resolve, reject) => {
             this.proxyClient.sendMessage(MessageBuilder.createNotification({
                 topic: topic,
                 message: request.toString(),
@@ -126,7 +130,24 @@ class Client extends EventEmitter {
             }));
 
             if (withResponse) {
-                this._ee.once(request.correlationId, (response) => resolve(response));
+                let timerHandler;
+
+                this._ee.once(request.correlationId, (response) => {
+                    clearTimeout(timerHandler);
+
+                    if (response.failed) {
+                        reject(response);
+                    } else {
+                        resolve(response);
+                    }
+                });
+
+                if (responseTimeOut) {
+                    timerHandler = setTimeout(() => {
+                        this._ee.removeAllListeners(request.correlationId);
+                        reject(new Error(`Request #${request.correlationId} timeout`));
+                    }, responseTimeOut);
+                }
             } else {
                 resolve();
             }
